@@ -55,6 +55,10 @@ steps:
         echo 'backend_storage_account_name is $(backend_storage_account_name)'
         echo 'backend_container_name is $(backend_container_name)'
         echo 'backend_blob_name is $(backend_blob_name)'
+        echo 'modules_repo_url is $(modules_repo_url)'
+
+        AUTH=$(echo -n ":$(gh_access_token)" | openssl base64 | tr -d '\n')
+        git config --global http.$(modules_repo_url).extraHeader "Authorization: Basic $AUTH"
 
         terraform init \
                 --backend-config="storage_account_name=$(backend_storage_account_name)" \
