@@ -1,0 +1,101 @@
+﻿# Terraform Build Pipeline Template
+
+parameters:
+- name: environment
+  type: string
+  
+
+variables:
+  workingDir: 'env/${{ parameters.environment }}'
+  backend_storage_account_name: tfdemostateb59s
+  backend_container_name: ${{ parameters.environment }}
+  backend_blob_name: '${{ parameters.environment }}.tfstate'
+  resource_group_name: tf-demo-state
+  sas_expiration: $(date -u -d "4 hours" '+%Y-%m-%dT%H:%MZ')
+
+steps:
+  - script: |
+      wget https://releases.hashicorp.com/terraform/0.13.4/terraform_0.13.4_linux_amd64.zip
+      unzip terraform*.zip
+      rm terraform*.zip
+      chmod u+x ./terraform
+      terraform version
+    displayName: 'download terraform'
+    workingDirectory: $(workingDir)
+
+  - task: AzureCLI@1
+    name: 'generateSasToken'
+    displayName: 'Generate Sas Token'
+    inputs:
+      azureSubscription: 'ADOSPN'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -euo pipefail
+
+        token=$(az storage container generate-sas \
+                   --account-name $(backend_storage_account_name) \
+                   --name $(backend_container_name) \
+                   --expiry $(sas_expiration) \
+                   --permission rlw \
+                   --https-only \
+                   --output tsv)
+        echo "##vso[task.setvariable variable=token;isSecret=true;isOutput=true]$token"
+      workingDirectory: $(workingDir)
+
+  - task: AzureCLI@1
+    displayName: 'terraform init'
+    inputs:
+      azureSubscription: 'ADOSPN'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -euo pipefail
+        echo 'generateSasToken.token is $(generateSasToken.token)'
+        echo 'backend_storage_account_name is $(backend_storage_account_name)'
+        echo 'backend_container_name is $(backend_container_name)'
+        echo 'backend_blob_name is $(backend_blob_name)'
+
+        terraform init \
+                --backend-config="storage_account_name=$(backend_storage_account_name)" \
+                --backend-config="container_name=$(backend_container_name)" \
+                --backend-config="key=$(backend_blob_name)" \
+                --backend-config="resource_group_name=" \
+                --backend-config="sas_token=$(generateSasToken.token)" \
+                -no-color \
+                -input=false
+      workingDirectory: $(workingDir)
+
+  - task: AzureCLI@2
+    displayName: 'terraform plan'
+    env:
+      TF_VAR_tenant_id: $(tenant_id)
+      TF_VAR_client_id: $(client_id)
+      TF_VAR_client_secret: $(client_secret)
+      TF_VAR_subscription_id: $(subscription_id)
+    inputs:
+      workingDirectory: $(workingDir)
+      azureSubscription: 'ADOSPN'
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -euo pipefail
+
+        terraform plan \
+                -no-color \
+                -input=false \
+                -out ${{ parameters.environment }}.$(Build.BuildNumber).tfplan
+
+  - task: ArchiveFiles@2
+    inputs:
+      rootFolderOrFile: './'
+      archiveType: tar
+      tarCompression: gz
+      archiveFile: '$(Build.ArtifactStagingDirectory)/drop.tgz'
+      replaceExistingArchive: true
+      includeRootFolder: false
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      pathtoPublish: '$(Build.ArtifactStagingDirectory)'
+      artifactName: tfplan
+
+
