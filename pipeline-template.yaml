@@ -3,6 +3,8 @@
 parameters:
 - name: environment
   type: string
+- name: azurespn
+  type: string
   
 
 variables:
@@ -27,7 +29,7 @@ steps:
     name: 'generateSasToken'
     displayName: 'Generate Sas Token'
     inputs:
-      azureSubscription: 'ADOSPN'
+      azureSubscription: '${{ parameters.azurespn }}'
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -euo pipefail
@@ -45,7 +47,7 @@ steps:
   - task: AzureCLI@1
     displayName: 'terraform init'
     inputs:
-      azureSubscription: 'ADOSPN'
+      azureSubscription: '${{ parameters.azurespn }}'
       scriptLocation: 'inlineScript'
       inlineScript: |
         set -euo pipefail
@@ -73,7 +75,7 @@ steps:
       TF_VAR_subscription_id: $(subscription_id)
     inputs:
       workingDirectory: $(workingDir)
-      azureSubscription: 'ADOSPN'
+      azureSubscription: '${{ parameters.azurespn }}'
       scriptType: 'bash'
       scriptLocation: 'inlineScript'
       inlineScript: |
