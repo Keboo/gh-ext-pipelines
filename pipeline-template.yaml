@@ -1,4 +1,4 @@
-﻿# Terraform Build Pipeline Template
+# Terraform Build Pipeline Template
 
 parameters:
 - name: environment
